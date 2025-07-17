@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research Job Manager Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .api-test {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        .job-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+        }
+        .job-item.in-progress {
+            border-left-color: #ffc107;
+        }
+        .job-item.failed {
+            border-left-color: #dc3545;
+        }
+        #historySidebar {
+            width: 340px;
+            min-width: 240px;
+            max-width: 400px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 16px 10px 16px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        #historyList {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左サイドバー：履歴リスト -->
+        <div id="historySidebar">
+            <h2 style="margin-top:0;">🗂 履歴</h2>
+            <div id="historyList">読み込み中...</div>
+        </div>
+        <!-- 右メイン：チャット詳細 -->
+        <div style="flex:1;min-width:0;">
+            <h1>🔍 Deep Research Job Manager Test</h1>
+            
+            <div class="api-test">
+                <h2>1. Research Start</h2>
+                <textarea id="queryInput" placeholder="調査したい内容を入力してください..." rows="3">OpenAI o3モデルの最新情報と性能評価について詳しく調べてください</textarea>
+                <button onclick="startResearch()">Start Research</button>
+                <div id="startResult" class="result"></div>
+            </div>
+            
+
+            <div class="api-test">
+                <h2>2. Job Status Check</h2>
+                <input type="text" id="jobIdInput" placeholder="Job ID を入力してください">
+                <button onclick="checkStatus()">Check Status</button>
+                <button onclick="manualPoll()">手動ポーリング開始</button>
+                <div id="statusResult" class="result"></div>
+            </div>
+
+            <div class="api-test">
+                <h2>3. Get Result</h2>
+                <input type="text" id="resultJobIdInput" placeholder="Job ID を入力してください">
+                <button onclick="getResult()">Get Result</button>
+                <div id="getResultResult" class="result"></div>
+            </div>
+            
+            <div class="api-test">
+                <h2>4. List Jobs</h2>
+                <button onclick="listJobs()">List All Jobs</button>
+                <button onclick="listJobs('in_progress')">List Active Jobs</button>
+                <button onclick="listJobs('completed')">List Completed Jobs</button>
+                <div id="listResult" class="result"></div>
+            </div>
+            
+            <div class="api-test">
+                <h2>5. Auto Polling Test</h2>
+                <textarea id="autoQueryInput" placeholder="自動ポーリングテスト用クエリ..." rows="3">AI技術の最新動向について調査してください</textarea>
+                <button onclick="startAutoPoll()">Start Auto-Poll Research</button>
+                <div id="autoResult" class="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:7071/api';
+        
+        async function startResearch() {
+            const query = document.getElementById('queryInput').value.trim();
+            const resultDiv = document.getElementById('startResult');
+            
+            if (!query) {
+                resultDiv.innerHTML = '<div class="error">クエリを入力してください</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Starting research...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/research/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, user_id: 'test-user' })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div class="success">Research started successfully!<br>Job ID: ${data.job_id}</div>`;
+                    document.getElementById('jobIdInput').value = data.job_id;
+                    document.getElementById('resultJobIdInput').value = data.job_id;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+            }
+        }
+        
+        async function checkStatus() {
+            const jobId = document.getElementById('jobIdInput').value.trim();
+            const resultDiv = document.getElementById('statusResult');
+            
+            if (!jobId) {
+                resultDiv.innerHTML = '<div class="error">Job IDを入力してください</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Checking status...';
+            try {
+                const response = await fetch(`${API_BASE}/research/status/${jobId}`);
+                const data = await response.json();
+                let html = '';
+                if (response.ok) {
+                    // 失敗時はエラー詳細も表示
+                    if (data.status === 'failed') {
+                        const errMsg = data.error_message || data.error || 'Unknown error';
+                        html += `<div class="error">Status: ${data.status}<br>Error: ${errMsg}<br>Current Step: ${data.current_step || 'N/A'}<br>Steps: ${data.steps.length}</div>`;
+                    } else {
+                        html += `<div class="success">Status: ${data.status}<br>Current Step: ${data.current_step || 'N/A'}<br>Steps: ${data.steps.length}</div>`;
+                    }
+                    // メッセージ履歴と参考リンクも表示しちゃう！
+                    if (Array.isArray(data.messages) && data.messages.length > 0) {
+                        html += `<hr><div><strong>💬 メッセージ履歴</strong></div>`;
+                        data.messages.forEach((msg, idx) => {
+                            html += `<div style="margin:10px 0;padding:8px;border-radius:6px;background:#fff;border:1px solid #eee;">
+                                <span style="font-weight:bold;color:#007bff;">${msg.role}</span> <span style="color:#888;">(${msg.created_at})</span><br>`;
+                            if (Array.isArray(msg.content)) {
+                                html += msg.content.map(c => `<div>${c}</div>`).join('');
+                            }
+                            // citationsがあればリンク表示！
+                            if (Array.isArray(msg.citations) && msg.citations.length > 0) {
+                                html += `<div style="margin-top:6px;"><span style="color:#ff69b4;font-weight:bold;">🔗 参考リンク:</span> `;
+                                msg.citations.forEach(cite => {
+                                    html += `<a href="${cite.url}" target="_blank" style="margin-right:8px;color:#e83e8c;text-decoration:underline;">${cite.title ? cite.title : cite.url}</a>`;
+                                });
+                                html += `</div>`;
+                            }
+                            html += `</div>`;
+                        });
+                    }
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+            }
+        }
+        
+        async function getResult() {
+            const jobId = document.getElementById('resultJobIdInput').value.trim();
+            const resultDiv = document.getElementById('getResultResult');
+            
+            if (!jobId) {
+                resultDiv.innerHTML = '<div class="error">Job IDを入力してください</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Getting result...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/research/result/${jobId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.success) {
+                        resultDiv.innerHTML = `<div class="success">Result received!<br><br>${data.result.substring(0, 500)}...</div>`;
+                    } else {
+                        // error_messageやerrorがあれば優先して表示
+                        const errMsg = data.error_message || data.error || data.message || 'Unknown error';
+                        resultDiv.innerHTML = `<div class="error">Job not completed: ${errMsg}</div>`;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+            }
+        }
+        
+        async function listJobs(status = null) {
+            const resultDiv = document.getElementById('listResult');
+            
+            resultDiv.innerHTML = 'Loading jobs...';
+            
+            try {
+                let url = `${API_BASE}/research/jobs`;
+                if (status) {
+                    url += `?status=${status}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = `<div class="success">Found ${data.jobs.length} jobs</div>`;
+                    html += `<div>Stats: Total: ${data.stats.total}, Completed: ${data.stats.completed}, In Progress: ${data.stats.in_progress}, Failed: ${data.stats.failed}</div>`;
+                    
+                    data.jobs.forEach(job => {
+                        const className = job.status === 'completed' ? 'job-item' : 
+                                        job.status === 'failed' ? 'job-item failed' : 'job-item in-progress';
+                        html += `<div class="${className}">
+        <strong>${job.id}</strong> - ${job.status}<br>
+        <span style='color:#888'>User: ${job.user_id || 'anonymous'}</span><br>
+        Query: ${job.query}<br>
+        <span style='color:#888'>Agent ID: ${job.agent_id || '-'}<br>Thread ID: ${job.thread_id || '-'}<br>Run ID: ${job.run_id || '-'}</span><br>
+        Created: ${job.created_at}<br>
+        <button onclick=\"deleteJob('${job.id}')\" style='background:#dc3545;color:white;'>Delete</button>
+    </div>`;
+                    });
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+            }
+        }
+        
+        async function startAutoPoll() {
+            const query = document.getElementById('autoQueryInput').value.trim();
+            const resultDiv = document.getElementById('autoResult');
+            
+            if (!query) {
+                resultDiv.innerHTML = '<div class="error">クエリを入力してください</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Starting auto-poll research...';
+            
+            try {
+                // 1. Start research
+                const startResponse = await fetch(`${API_BASE}/research/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, user_id: 'test-user' })
+                });
+                
+                const startData = await startResponse.json();
+                
+                if (!startResponse.ok) {
+                    resultDiv.innerHTML = `<div class="error">Start failed: ${startData.error}</div>`;
+                    return;
+                }
+                
+                const jobId = startData.job_id;
+                resultDiv.innerHTML = `<div class="success">Research started! Job ID: ${jobId}<br>Polling for updates...</div>`;
+                
+                // 2. Poll for status
+                let attempts = 0;
+                const maxAttempts = 60; // 10 minutes
+                
+                const pollStatus = async () => {
+                    attempts++;
+                    
+                    try {
+                        const statusResponse = await fetch(`${API_BASE}/research/status/${jobId}`);
+                        const statusData = await statusResponse.json();
+                        
+                        if (statusResponse.ok) {
+                            resultDiv.innerHTML = `<div class="success">Job ID: ${jobId}<br>Status: ${statusData.status}<br>Current Step: ${statusData.current_step || 'N/A'}<br>Steps: ${statusData.steps.length}<br>Attempts: ${attempts}</div>`;
+                            
+                            if (statusData.status === 'completed') {
+                                // Get result
+                                const resultResponse = await fetch(`${API_BASE}/research/result/${jobId}`);
+                                const resultData = await resultResponse.json();
+                                
+                                if (resultResponse.ok && resultData.success) {
+                                    resultDiv.innerHTML = `<div class="success">✅ Research completed!<br><br>${resultData.result.substring(0, 1000)}...</div>`;
+                                } else {
+                                    resultDiv.innerHTML = `<div class="error">Failed to get result: ${resultData.message}</div>`;
+                                }
+                                return;
+                            } else if (statusData.status === 'failed') {
+                                resultDiv.innerHTML = `<div class="error">Research failed: ${statusData.error}</div>`;
+                                return;
+                            }
+                            
+                            // Continue polling
+                            if (attempts < maxAttempts) {
+                                setTimeout(pollStatus, 10000); // 10 seconds
+                            } else {
+                                resultDiv.innerHTML = `<div class="error">Timeout: Maximum attempts (${maxAttempts}) reached</div>`;
+                            }
+                        } else {
+                            resultDiv.innerHTML = `<div class="error">Status check failed: ${statusData.error}</div>`;
+                        }
+                    } catch (error) {
+                        resultDiv.innerHTML = `<div class="error">Polling error: ${error.message}</div>`;
+                    }
+                };
+                
+                // Start polling
+                setTimeout(pollStatus, 5000); // Initial delay
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+            }
+        }
+        
+        async function deleteJob(jobId) {
+    if (!confirm('本当にこのJobを削除する？')) return;
+    try {
+        const response = await fetch(`${API_BASE}/research/job/${jobId}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            alert('削除完了！');
+            listJobs();
+        } else {
+            alert('削除失敗: ' + (data.error || data.message));
+        }
+    } catch (e) {
+        alert('削除エラー: ' + e.message);
+    }
+}
+
+    // 履歴リスト取得＆表示
+    async function loadHistory() {
+        const historyDiv = document.getElementById('historyList');
+        historyDiv.innerHTML = '読み込み中...';
+        try {
+            const response = await fetch(`${API_BASE}/research/jobs`);
+            const data = await response.json();
+            if (response.ok && Array.isArray(data.jobs)) {
+                if (data.jobs.length === 0) {
+                    historyDiv.innerHTML = '<div style="color:#888">履歴なし</div>';
+                    return;
+                }
+                let html = '';
+                data.jobs.forEach(job => {
+                    html += `<div class="job-item" style="cursor:pointer;margin-bottom:8px;padding:8px;border-radius:6px;border-left:4px solid ${job.status==='completed'?'#28a745':job.status==='failed'?'#dc3545':'#ffc107'};background:#fff;" onclick="selectHistoryJob('${job.id}')">
+                        <div style="font-size:13px;color:#888;">${job.created_at}</div>
+                        <div style="font-weight:bold;">${job.query.length>40?job.query.substring(0,40)+'...':job.query}</div>
+                        <div style="font-size:12px;color:#555;">Status: <span style="font-weight:bold;">${job.status}</span></div>
+                        <div style="font-size:12px;color:#aaa;">Job ID: ${job.id}</div>
+                    </div>`;
+                });
+                historyDiv.innerHTML = html;
+            } else {
+                historyDiv.innerHTML = `<div class="error">履歴取得失敗: ${data.error || 'Unknown error'}</div>`;
+            }
+        } catch (e) {
+            historyDiv.innerHTML = `<div class="error">履歴取得エラー: ${e.message}</div>`;
+        }
+    }
+
+    // 履歴クリック時に右側へ詳細表示
+    function selectHistoryJob(jobId) {
+        document.getElementById('jobIdInput').value = jobId;
+        checkStatus();
+        // ついでにGet Result欄も更新
+        document.getElementById('resultJobIdInput').value = jobId;
+    }
+
+    // ページロード時に履歴読み込み
+    window.addEventListener('DOMContentLoaded', loadHistory);
+    </script>
+</body>
+</html>

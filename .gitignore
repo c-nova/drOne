@@ -1,0 +1,32 @@
+# Node.js (swa-chat-ui)
+swa-chat-ui/node_modules/
+swa-chat-ui/dist/
+swa-chat-ui/.DS_Store
+swa-chat-ui/.env
+
+# Python (DeepResearchFunctionApp)
+DeepResearchFunctionApp/.venv/
+DeepResearchFunctionApp/__pycache__/
+DeepResearchFunctionApp/*/__pycache__/
+DeepResearchFunctionApp/*.pyc
+DeepResearchFunctionApp/*.pyo
+DeepResearchFunctionApp/.DS_Store
+DeepResearchFunctionApp/local.settings.json
+DeepResearchFunctionApp/shared/research_jobs.db
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.env
+.env.*
