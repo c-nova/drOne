@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research Report - Print Version</title>
+    <style>
+        /* 印刷専用スタイル */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #333;
+            background: white;
+            padding: 0;
+            margin: 0;
+        }
+
+        /* 印刷とスクリーン共通 */
+        .print-container {
+            max-width: 100%;
+            margin: 0;
+            padding: 0.7cm;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 1.2cm;
+            padding-bottom: 0.5cm;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #667eea;
+            margin-bottom: 0.5cm;
+        }
+
+        .header .timestamp {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .message-section {
+            margin-bottom: 1.2cm;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            border: 1px solid #eee;
+            padding: 0.7cm;
+            border-radius: 8px;
+        }
+
+        .message-header {
+            font-weight: bold;
+            font-size: 16px;
+            color: #764ba2;
+            margin-bottom: 1cm;
+            page-break-after: avoid;
+            break-after: avoid;
+        }
+
+        .message-content {
+            line-height: 1.8;
+        }
+
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            page-break-after: avoid;
+            break-after: avoid;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            margin-top: 1cm;
+            margin-bottom: 0.5cm;
+            color: #333;
+        }
+
+        .message-content h1 { font-size: 20px; }
+        .message-content h2 { font-size: 18px; }
+        .message-content h3 { font-size: 16px; }
+
+        .message-content p {
+            margin-bottom: 0.8cm;
+            orphans: 3;
+            widows: 3;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            margin-left: 1cm;
+            margin-bottom: 1cm;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .message-content li {
+            margin-bottom: 0.3cm;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .message-content blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 1cm;
+            margin: 1cm 0;
+            font-style: italic;
+            background: #f8f9fa;
+            padding: 0.5cm 1cm;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .message-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1cm 0;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .message-content th,
+        .message-content td {
+            border: 1px solid #ddd;
+            padding: 0.3cm;
+            text-align: left;
+        }
+
+        .message-content th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+
+        .citation-link {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .citation-link:after {
+            content: " 🔗";
+            font-size: 0.8em;
+        }
+
+        /* 印刷専用設定 */
+        @media print {
+            @page {
+                margin: 0.7cm;
+                size: A4 portrait;
+            }
+
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .message-section {
+                margin-bottom: 1.2cm;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+        }
+
+        /* スクリーン表示用（印刷プレビュー） */
+        @media screen {
+            body {
+                background: #f5f5f5;
+                padding: 2cm 0;
+            }
+
+            .print-container {
+                background: white;
+                box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                margin: 0 auto;
+                max-width: 21cm; /* A4幅 */
+                min-height: 29.7cm; /* A4高さ */
+            }
+
+            .print-controls {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 1000;
+            }
+
+            .print-btn {
+                background: #667eea;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 14px;
+                margin-left: 10px;
+            }
+
+            .print-btn:hover {
+                background: #5a6fd8;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-controls no-print">
+        <label style="color: #333; margin-right: 10px;">
+            <input type="radio" name="printMode" value="final" checked onchange="updateDisplayMode()"> Final Report
+        </label>
+        <label style="color: #333; margin-right: 20px;">
+            <input type="radio" name="printMode" value="all" onchange="updateDisplayMode()"> 全やり取り
+        </label>
+        <button class="print-btn" onclick="window.print()">🖨️ 印刷/PDF出力</button>
+        <button class="print-btn" onclick="window.close()">✕ 閉じる</button>
+    </div>
+
+    <div class="print-container">
+        <div class="header">
+            <h1>Deep Research Report</h1>
+            <div class="timestamp" id="timestamp"></div>
+        </div>
+
+        <div id="content">
+            <!-- コンテンツはJavaScriptで動的に挿入 -->
+            <div class="message-section">
+                <div class="message-header">🔄 レポートを読み込み中...</div>
+                <div class="message-content">
+                    <p>チャット画面からこのページを開いてください。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ページロード時にタイムスタンプを設定
+        document.getElementById('timestamp').textContent = 
+            '生成日時: ' + new Date().toLocaleString('ja-JP');
+
+        // グローバル変数
+        let currentMessages = [];
+
+        // URLパラメータまたはlocalStorageからメッセージを取得
+        function loadMessages() {
+            try {
+                // URLパラメータから取得を試行
+                const urlParams = new URLSearchParams(window.location.search);
+                const messagesParam = urlParams.get('messages');
+                
+                let messages = [];
+                
+                if (messagesParam) {
+                    messages = JSON.parse(decodeURIComponent(messagesParam));
+                } else {
+                    // localStorageから取得
+                    const storedMessages = localStorage.getItem('printMessages');
+                    if (storedMessages) {
+                        messages = JSON.parse(storedMessages);
+                        // 使用後は削除
+                        localStorage.removeItem('printMessages');
+                    }
+                }
+
+                if (messages && messages.length > 0) {
+                    currentMessages = messages;
+                    renderMessages(messages);
+                } else {
+                    document.getElementById('content').innerHTML = `
+                        <div class="message-section">
+                            <div class="message-header">⚠️ データが見つかりません</div>
+                            <div class="message-content">
+                                <p>チャット画面の「📄 PDF用表示」ボタンからこのページを開いてください。</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('メッセージの読み込みエラー:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="message-section">
+                        <div class="message-header">❌ エラーが発生しました</div>
+                        <div class="message-content">
+                            <p>データの読み込み中にエラーが発生しました。</p>
+                            <p>エラー: ${error.message}</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 表示モード更新
+        function updateDisplayMode() {
+            if (currentMessages.length > 0) {
+                renderMessages(currentMessages);
+            }
+        }
+
+        // メッセージをレンダリング
+        function renderMessages(messages) {
+            const content = document.getElementById('content');
+            content.innerHTML = '';
+            
+            // 選択されたモードを取得
+            const printMode = document.querySelector('input[name="printMode"]:checked')?.value || 'final';
+            
+            if (printMode === 'final') {
+                // Final Reportのみを表示（最後のAIメッセージ）
+                const aiMessages = messages.filter(msg => msg.type === 'ai' && msg.content);
+                const finalReport = aiMessages[aiMessages.length - 1]; // 最後のAIメッセージ
+
+                if (finalReport) {
+                    const section = document.createElement('div');
+                    section.className = 'message-section';
+                    
+                    // マークダウンをHTMLに変換
+                    const processedContent = processMarkdown(finalReport.content);
+                    
+                    section.innerHTML = `
+                        <div class="message-header">📋 Final Research Report</div>
+                        <div class="message-content">${processedContent}</div>
+                    `;
+                    
+                    content.appendChild(section);
+                } else {
+                    content.innerHTML = `
+                        <div class="message-section">
+                            <div class="message-header">📝 レポートがありません</div>
+                            <div class="message-content">
+                                <p>Final Reportが見つかりませんでした。</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                // 全やり取りを表示
+                let messageCount = 0;
+                messages.forEach((message) => {
+                    if (message.type === 'user' && message.content) {
+                        messageCount++;
+                        const section = document.createElement('div');
+                        section.className = 'message-section';
+                        
+                        section.innerHTML = `
+                            <div class="message-header">👤 ユーザー質問 ${messageCount}</div>
+                            <div class="message-content"><p>${message.content}</p></div>
+                        `;
+                        
+                        content.appendChild(section);
+                    } else if (message.type === 'ai' && message.content) {
+                        const section = document.createElement('div');
+                        section.className = 'message-section';
+                        
+                        // マークダウンをHTMLに変換
+                        const processedContent = processMarkdown(message.content);
+                        
+                        section.innerHTML = `
+                            <div class="message-header">🤖 AI回答 ${messageCount}</div>
+                            <div class="message-content">${processedContent}</div>
+                        `;
+                        
+                        content.appendChild(section);
+                    }
+                });
+
+                if (content.children.length === 0) {
+                    content.innerHTML = `
+                        <div class="message-section">
+                            <div class="message-header">📝 メッセージがありません</div>
+                            <div class="message-content">
+                                <p>表示できるメッセージが見つかりませんでした。</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // 簡易マークダウン処理
+        function processMarkdown(content) {
+            if (!content) return '';
+            
+            let processed = content;
+            
+            // テーブル処理（最初に行う）
+            processed = processMarkdownTables(processed);
+            
+            // 見出し処理
+            processed = processed.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+            processed = processed.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+            processed = processed.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+            
+            // 太字処理
+            processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            processed = processed.replace(/__(.*?)__/g, '<strong>$1</strong>');
+            
+            // 斜体処理
+            processed = processed.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            processed = processed.replace(/_(.*?)_/g, '<em>$1</em>');
+            
+            // リスト処理（bullet points）
+            processed = processed.replace(/^[\-\*\+] (.+)$/gm, '<li>$1</li>');
+            processed = processed.replace(/^・ (.+)$/gm, '<li>$1</li>');
+            processed = processed.replace(/^• (.+)$/gm, '<li>$1</li>');
+            
+            // liタグをulで囲む
+            processed = processed.replace(/((?:<li>.*<\/li>\s*)+)/g, '<ul>$1</ul>');
+            
+            // 番号付きリスト処理
+            processed = processed.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+            processed = processed.replace(/((?:<li>.*<\/li>\s*)+)/g, (match) => {
+                if (match.includes('1. ')) {
+                    return '<ol>' + match.replace(/^\d+\. /gm, '') + '</ol>';
+                }
+                return '<ul>' + match + '</ul>';
+            });
+            
+            // 段落処理
+            processed = processed.replace(/\n\n/g, '</p><p>');
+            processed = '<p>' + processed + '</p>';
+            
+            // 空の段落を削除
+            processed = processed.replace(/<p><\/p>/g, '');
+            processed = processed.replace(/<p>\s*<\/p>/g, '');
+            
+            // Citation処理（【数字:数字†source】形式）
+            processed = processed.replace(/【(\d+):(\d+)†([^】]+)】/g, 
+                '<span class="citation-link">【$1:$2†$3】</span>');
+            
+            // blockquote処理
+            processed = processed.replace(/^> (.*)$/gm, '<blockquote>$1</blockquote>');
+            
+            return processed;
+        }
+
+        // テーブル処理専用関数
+        function processMarkdownTables(content) {
+            const lines = content.split('\n');
+            const result = [];
+            let i = 0;
+            
+            while (i < lines.length) {
+                const line = lines[i].trim();
+                
+                // テーブル行をチェック（|を含む行）
+                if (line.includes('|') && line.split('|').length >= 3) {
+                    // テーブルの開始を検出
+                    const tableLines = [];
+                    let j = i;
+                    
+                    // 連続するテーブル行を収集
+                    while (j < lines.length && lines[j].trim().includes('|')) {
+                        const tableLine = lines[j].trim();
+                        if (tableLine.split('|').length >= 3) {
+                            tableLines.push(tableLine);
+                        }
+                        j++;
+                    }
+                    
+                    if (tableLines.length >= 2) {
+                        // テーブルをHTMLに変換
+                        const tableHtml = convertTableToHtml(tableLines);
+                        result.push(tableHtml);
+                        i = j; // テーブルの後の行に移動
+                        continue;
+                    }
+                }
+                
+                result.push(lines[i]);
+                i++;
+            }
+            
+            return result.join('\n');
+        }
+
+        // テーブルをHTMLに変換
+        function convertTableToHtml(tableLines) {
+            if (tableLines.length < 2) return tableLines.join('\n');
+            
+            let html = '<table>\n';
+            
+            // ヘッダー行の処理
+            const headerCells = tableLines[0].split('|')
+                .map(cell => cell.trim())
+                .filter(cell => cell !== '');
+            
+            html += '<thead>\n<tr>\n';
+            headerCells.forEach(cell => {
+                html += `<th>${cell}</th>\n`;
+            });
+            html += '</tr>\n</thead>\n';
+            
+            // 区切り行をスキップ（2行目は通常 |---|---|--- のような形式）
+            let dataStartIndex = 1;
+            if (tableLines[1].includes('---') || tableLines[1].includes('===')) {
+                dataStartIndex = 2;
+            }
+            
+            // データ行の処理
+            html += '<tbody>\n';
+            for (let i = dataStartIndex; i < tableLines.length; i++) {
+                const dataCells = tableLines[i].split('|')
+                    .map(cell => cell.trim())
+                    .filter(cell => cell !== '');
+                
+                if (dataCells.length > 0) {
+                    html += '<tr>\n';
+                    dataCells.forEach(cell => {
+                        html += `<td>${cell}</td>\n`;
+                    });
+                    html += '</tr>\n';
+                }
+            }
+            html += '</tbody>\n';
+            html += '</table>';
+            
+            return html;
+        }
+
+        // ページロード時に実行
+        window.addEventListener('load', loadMessages);
+    </script>
+</body>
+</html>

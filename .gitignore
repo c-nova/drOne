@@ -13,6 +13,7 @@ DeepResearchFunctionApp/*.pyo
 DeepResearchFunctionApp/.DS_Store
 DeepResearchFunctionApp/local.settings.json
 DeepResearchFunctionApp/shared/research_jobs.db
+DeepResearchFunctionApp/research_jobs.db
 
 # OS/Editor
 .DS_Store

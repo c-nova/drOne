@@ -1,78 +1,117 @@
 import { LitElement, html, css } from 'lit'
-import { marked } from 'marked'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType } from 'docx'
+import { Buffer } from 'buffer'
+import { MarkdownRenderer } from './markdown-renderer.js'
+import { FileExporter } from './file-exporter.js'
+import { MessageRenderer } from './message-renderer.js'
+import { MessageProcessor } from './message-processor.js'
+
+// グローバルBufferを設定
+window.Buffer = Buffer
 
 class ChatApp extends LitElement {
   // 履歴用stateはstatic propertiesで管理！
   // 画面ロード時に進行中ジョブだけ復元（履歴機能は削除！）
   connectedCallback() {
-    // 履歴も取得して保存するよ！
-    (async () => {
-      try {
-        const res = await fetch('http://localhost:7071/api/research/jobs');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.jobs) return;
-        // 履歴（完了・失敗ジョブ）を保存
-        this.historyJobs = data.jobs.filter(j => j.status === 'completed' || j.status === 'failed').map(j => ({
-          jobId: j.id,
-          threadId: j.thread_id || '-',
-          summary: (j.result || j.error_message || '').slice(0, 40),
-          status: j.status,
-          created_at: j.created_at || ''
-        }));
-        // ...existing code...
-      } catch (e) {}
-    })();
-    if (super.connectedCallback) super.connectedCallback();
-    (async () => {
-      try {
-        const res = await fetch('http://localhost:7071/api/research/jobs');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.jobs) return;
-        // 進行中ジョブがあればprogress表示＋ポーリング復元
-        const inProgress = data.jobs.find(j => ['created','starting','in_progress','queued','requires_action'].includes(j.status));
-        if (inProgress) {
-          this.currentProgress = {
-            status: inProgress.status,
-            message: '🔍 Deep Research実行中...',
-            jobId: inProgress.id,
-            timestamp: inProgress.start_time || inProgress.created_at
-          };
-          this.messages = [{
-            type: 'progress',
-            content: 'Deep Research実行中...',
-            progress: this.currentProgress
-          }];
-          this.pollJobStatus(inProgress.id).then(result => {
-            this.messages = this.messages.filter(msg => msg.type !== 'progress');
-            if (result.success) {
-              this.messages = [...this.messages, {
-                type: 'ai',
-                content: result.result,
-                references: [],
-                statusUpdates: result.steps || [],
-                jobId: inProgress.id
-              }];
-            } else {
-              const errMsg = result.error_message || result.error || 'Unknown error';
-              this.messages = [...this.messages, {
-                type: 'ai',
-                content: `エラーが発生しました: ${errMsg}`,
-                references: [],
-                jobId: inProgress.id
-              }];
-            }
-          });
-        } else {
-          this.messages = [];
-        }
-      } catch (e) {
-        // 何もしない
+    console.log('connectedCallback 開始！');
+    super.connectedCallback();
+    
+    // 履歴取得をリトライ付きで実行
+    this.loadHistoryWithRetry();
+  }
+  
+  firstUpdated() {
+    console.log('firstUpdated 開始！');
+    // connectedCallbackが実行されなかった場合のフォールバック
+    if (!this.historyJobs || this.historyJobs.length === 0) {
+      console.log('履歴が空なので、再度履歴を取得します...');
+      this.loadHistoryWithRetry();
+    }
+    
+    // アクションボタンのイベントハンドラーを設定
+    this.setupActionButtonHandlers();
+  }
+  
+  async loadHistoryWithRetry(retries = 3) {
+    console.log('履歴取得開始！リトライ回数:', retries);
+    try {
+      const res = await fetch('http://localhost:7071/api/research/jobs');
+      console.log('API response:', res.status, res.statusText);
+      if (!res.ok) {
+        throw new Error(`API呼び出しエラー: ${res.status} ${res.statusText}`);
       }
-    })();
+      const data = await res.json();
+      console.log('取得したデータ:', data);
+      if (!data.jobs) {
+        throw new Error('jobs配列がない');
+      }
+      
+      // 履歴（完了・失敗ジョブ）を保存
+      this.historyJobs = data.jobs.filter(j => j.status === 'completed' || j.status === 'failed').map(j => ({
+        jobId: j.id,
+        threadId: j.thread_id || '-',
+        summary: j.query || (j.result || j.error_message || '').slice(0, 40),
+        status: j.status,
+        created_at: j.created_at || ''
+      }));
+      console.log('履歴設定完了:', this.historyJobs.length, '件');
+      this.requestUpdate(); // 履歴を更新後に再描画を要求
+      
+      // 進行中ジョブがあればprogress表示＋ポーリング復元
+      const inProgress = data.jobs.find(j => ['created','starting','in_progress','queued','requires_action'].includes(j.status));
+      if (inProgress) {
+        // ブラウザから参照できるようにグローバルに設定
+        window.currentJobId = inProgress.id;
+        console.log('[DEBUG] Found in-progress job, set currentJobId:', inProgress.id);
+        
+        this.currentProgress = {
+          status: inProgress.status,
+          message: '🔍 Deep Research実行中...',
+          jobId: inProgress.id,
+          timestamp: inProgress.start_time || inProgress.created_at
+        };
+        this.messages = [{
+          type: 'progress',
+          content: 'Deep Research実行中...',
+          progress: this.currentProgress
+        }];
+        this.pollJobStatus(inProgress.id).then(result => {
+          this.messages = this.messages.filter(msg => msg.type !== 'progress');
+          if (result.success) {
+            this.messages = [...this.messages, {
+              type: 'ai',
+              content: result.result,
+              references: [],
+              statusUpdates: result.steps || [],
+              jobId: inProgress.id
+            }];
+          } else {
+            const errMsg = result.error_message || result.error || 'Unknown error';
+            this.messages = [...this.messages, {
+              type: 'ai',
+              content: `❌ エラーが発生しました: ${errMsg}`,
+              references: [],
+              statusUpdates: [],
+              jobId: inProgress.id
+            }];
+          }
+          this.currentProgress = null;
+          this.requestUpdate();
+        });
+        this.requestUpdate();
+      }
+      
+    } catch (e) {
+      console.error('履歴取得エラー:', e);
+      if (retries > 0) {
+        console.log(`${retries}回リトライします...`);
+        setTimeout(() => this.loadHistoryWithRetry(retries - 1), 2000);
+      } else {
+        console.error('履歴取得に失敗しました。すべてのリトライを使い切りました。');
+      }
+    }
   }
   static styles = css`
     :host {
@@ -352,6 +391,150 @@ class ChatApp extends LitElement {
     ::slotted(.messages::-webkit-scrollbar-thumb:hover) {
       background-color: #0056b3;
     }
+
+    /* PDF/印刷用スタイル */
+    @media print {
+      .message {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin-bottom: 15px;
+        padding: 15px;
+        border: 1px solid #ccc;
+      }
+
+      .ai-message {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        orphans: 3;
+        widows: 3;
+      }
+
+      .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+        page-break-after: avoid;
+        break-after: avoid;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .markdown-content p {
+        orphans: 3;
+        widows: 3;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .markdown-content ul, .markdown-content ol {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .markdown-content li {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .markdown-content blockquote {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        border-left: 4px solid #ccc;
+        padding-left: 10px;
+        margin: 10px 0;
+      }
+
+      .markdown-content table {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin: 10px 0;
+      }
+
+      .citation-link {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      /* ページ余白の調整 */
+      @page {
+        margin: 4cm 2.5cm;  /* 上下4cm、左右2.5cm（大きめの余白） */
+        size: A4 portrait;
+        padding: 0;
+      }
+
+      /* より強力な印刷制御 */
+      .message {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 2cm !important;  /* メッセージ間を大きく空ける */
+        padding: 15px !important;
+        border: 1px solid #ccc !important;
+        overflow: visible !important;
+        display: block !important;  /* flexboxを無効化 */
+        min-height: 3cm !important;  /* 最小高さを確保 */
+      }
+
+      .ai-message {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        orphans: 4 !important;  /* 段落の最初で最低4行確保 */
+        widows: 4 !important;   /* 段落の最後で最低4行確保 */
+        margin-bottom: 1.5cm !important;
+      }
+
+      .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-top: 1.5cm !important;
+        margin-bottom: 1cm !important;
+      }
+
+      .markdown-content p {
+        orphans: 4 !important;
+        widows: 4 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 0.8cm !important;
+        line-height: 1.8 !important;  /* 行間を広く */
+      }
+
+      .markdown-content ul, .markdown-content ol {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 1cm !important;
+      }
+
+      .markdown-content li {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 0.3cm !important;
+      }
+
+      .markdown-content blockquote {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        border-left: 4px solid #ccc !important;
+        padding-left: 10px !important;
+        margin: 1cm 0 !important;
+      }
+
+      .markdown-content table {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin: 1cm 0 !important;
+      }
+
+      .citation-link {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+
+      /* 不要な要素を非表示 */
+      .input-area,
+      .message-actions,
+      .action-btn {
+        display: none !important;
+      }
+    }
   `
 
 
@@ -367,6 +550,10 @@ class ChatApp extends LitElement {
   // 画面ロード時にサーバーからジョブ履歴・進行中ジョブを復元
   connectedCallback() {
     if (super.connectedCallback) super.connectedCallback();
+    
+    // グローバルアクセス用の参照を設定
+    window.chatApp = this;
+    
     // 非同期処理は即時関数で
     (async () => {
       try {
@@ -374,19 +561,23 @@ class ChatApp extends LitElement {
         if (!res.ok) return;
         const data = await res.json();
         if (!data.jobs) return;
-        // デバッグ用: APIレスポンスを確認
-        console.log('履歴API jobs:', data.jobs);
-
-        // 履歴（完了・失敗ジョブ）をhistoryJobsに保存！
-        this.historyJobs = data.jobs.filter(j => j.status === 'completed' || j.status === 'failed').map(j => ({
-          jobId: j.id,
-          threadId: j.thread_id || '-',
-          summary: (j.result || j.error_message || '').slice(0, 40),
-          status: j.status,
-          created_at: j.created_at || ''
-        }));
-
-        // 2. 過去の履歴をmessagesに追加
+        // デバッグ用のannotation情報ログ
+        const messages = data.messages || [];
+        let allAnnotations = [];
+        
+        messages.forEach(msg => {
+            const citations = msg.citations || [];
+            if (citations.length > 0) {
+                console.log('[DEBUG] pollJobStatus - Found citations in message:', citations);
+                allAnnotations = allAnnotations.concat(citations);
+            }
+        });
+        
+        if (allAnnotations.length > 0) {
+            console.log('[DEBUG] pollJobStatus - Total annotations found:', allAnnotations);
+        } else {
+            console.log('[DEBUG] pollJobStatus - No annotations found in messages');
+        }        // 2. 過去の履歴をmessagesに追加
         const historyMsgs = data.jobs.filter(j => j.status === 'completed' || j.status === 'failed').map(j => {
           if (j.status === 'completed') {
             return {
@@ -456,6 +647,9 @@ class ChatApp extends LitElement {
     this.isComposing = false;
     this.currentProgress = null;
     this.historyJobs = [];
+    
+    // グローバルに参照を設定（MessageRendererからアクセスするため）
+    window.chatApp = this;
   }
 
   render() {
@@ -475,8 +669,10 @@ class ChatApp extends LitElement {
                     @click=${() => this._selectHistoryJob(job.jobId)}
                   >
                     <div style="font-size:13px;color:#888;">${job.created_at}</div>
-                    <div style="font-weight:bold;white-space:normal;word-break:break-all;">${job.summary}</div>
-                    <div style="font-size:12px;color:#555;">Status: <span style="font-weight:bold;">${job.status}</span></div>
+                    <div style="font-weight:bold;white-space:normal;word-break:break-all;">
+                      ${job.status === 'failed' ? '❌ ' : job.status === 'completed' ? '✅ ' : '🔄 '}${job.summary}
+                    </div>
+                    <div style="font-size:12px;color:#555;">Status: <span style="font-weight:bold;color:${job.status==='completed'?'#28a745':job.status==='failed'?'#dc3545':'#ffc107'};">${job.status}</span></div>
                     <div style="font-size:12px;color:#aaa;">Job ID: ${job.jobId}</div>
                     <div style="font-size:12px;color:#aaa;">Thread ID: ${job.threadId}</div>
                   </div>
@@ -526,216 +722,161 @@ class ChatApp extends LitElement {
   }
   // 履歴クリック時にそのJobの詳細だけ表示
   _selectHistoryJob(jobId) {
-    // ギャル流！履歴クリックでFoundry APIからメッセージ一覧取得して表示！
-    (async () => {
-      try {
-        this.loading = true;
-        this.messages = [];
-        // 履歴からthreadIdを探す
-        const job = this.historyJobs.find(j => j.jobId === jobId);
-        const threadId = job?.threadId;
-        if (!threadId || threadId === '-') throw new Error('Thread IDが見つからないよ！');
+    this._loadJobMessages(jobId);
+  }
 
-        // Foundry APIエンドポイントとトークン（仮）
-        const endpoint = window.AZURE_AI_FOUNDRY_PROJECT_ENDPOINT || 'https://your-foundry-endpoint';
-        const token = window.AGENT_TOKEN || 'your-token';
-
-        // メッセージ一覧取得
-        const resp = await fetch(`http://localhost:7071/api/research/status/${jobId}`);
-        if (!resp.ok) throw new Error('メッセージ取得失敗: ' + resp.status);
-        const data = await resp.json();
-        // messages配列がなければエラー
-        if (!Array.isArray(data.messages)) throw new Error('messages配列が見つからないよ！');
-
-        // test_api.htmlのCheckStatus表示ロジックを参考に、content配列を全部表示！
-        // 中間メッセージも含めて全部出す！
-        // 表示順序を古い順（下）→新しい順（上）にするため、messagesを逆順でセット！
-        const msgList = [];
-        data.messages.forEach(msg => {
-          let content = '';
-          let references = [];
-          // contentは配列で来ることが多い
-          if (Array.isArray(msg.content)) {
-            content = msg.content.map(c => typeof c === 'string' ? c : JSON.stringify(c)).join('\n');
-          } else if (typeof msg.content === 'string') {
-            content = msg.content;
-          } else if (msg.content && typeof msg.content === 'object') {
-            if (typeof msg.content.text === 'string') {
-              content = msg.content.text;
-            } else if (Array.isArray(msg.content.parts)) {
-              content = msg.content.parts.map(p => p.text).join('\n');
-            } else {
-              content = JSON.stringify(msg.content);
-            }
-          }
-          // citations, references, urls, sourcesも全部referencesにまとめる
-          if (Array.isArray(msg.citations)) {
-            msg.citations.forEach(cite => {
-              references.push({ url: cite.url, title: cite.title || cite.url });
-            });
-          }
-          if (Array.isArray(msg.references)) {
-            msg.references.forEach(ref => {
-              references.push({ url: ref.url || ref, title: ref.title || ref.url || ref });
-            });
-          }
-          if (Array.isArray(msg.urls)) {
-            msg.urls.forEach(url => {
-              references.push({ url: url, title: url });
-            });
-          }
-          if (Array.isArray(msg.sources)) {
-            msg.sources.forEach(src => {
-              references.push({ url: src, title: src });
-            });
-          }
-          // roleでuser/ai分岐
-          let type = 'ai';
-          if (msg.role === 'user') type = 'user';
-          msgList.push({
-            type,
-            content,
-            references,
-            jobId: jobId,
-            messageId: msg.id,
-            timestamp: msg.created_at || ''
-          });
-        });
-        this.messages = msgList.reverse();
-      } catch (e) {
-        this.messages = [{
-          type: 'ai',
-          content: `履歴取得でエラー: ${e.message}`,
-          jobId: jobId
-        }];
-      } finally {
-        this.loading = false;
-        this.currentProgress = null;
-        this.inputValue = '';
-        this.requestUpdate();
-        // メッセージ領域を最下部にスクロール
-        this.updateComplete.then(() => {
-          const messagesEl = this.shadowRoot.getElementById('messages');
-          if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-        });
+  // ジョブメッセージの共通読み込み処理
+  async _loadJobMessages(jobId) {
+    try {
+      this.loading = true;
+      this.messages = [];
+      
+      // 履歴からthreadIdを探す
+      const job = this.historyJobs.find(j => j.jobId === jobId);
+      const threadId = job?.threadId;
+      if (!threadId || threadId === '-') {
+        throw new Error('Thread IDが見つからないよ！');
       }
-    })();
+
+      // メッセージ一覧取得
+      const resp = await fetch(`http://localhost:7071/api/research/status/${jobId}`);
+      if (!resp.ok) {
+        throw new Error('メッセージ取得失敗: ' + resp.status);
+      }
+      
+      const data = await resp.json();
+      const msgList = [];
+
+      // 失敗ジョブの場合は、エラー情報を最初に表示
+      if (data.status === 'failed' && data.error_message) {
+        msgList.push(MessageProcessor.createErrorMessage(data, jobId));
+      }
+      
+      // メッセージを処理して追加
+      const processedMessages = MessageProcessor.processMessages(data.messages, jobId);
+      msgList.push(...processedMessages);
+      
+      // 失敗ジョブの場合は、stepsも表示
+      if (data.status === 'failed') {
+        const stepsMessage = MessageProcessor.createStepsMessage(data, jobId);
+        if (stepsMessage) {
+          msgList.push(stepsMessage);
+        }
+      }
+      
+      this.messages = msgList.reverse();
+      
+    } catch (e) {
+      this.messages = [{
+        type: 'ai',
+        content: `履歴取得でエラー: ${e.message}`,
+        jobId: jobId
+      }];
+    } finally {
+      this._finishLoading();
+    }
+  }
+
+  // 読み込み完了時の共通処理
+  _finishLoading() {
+    this.loading = false;
+    this.currentProgress = null;
+    this.inputValue = '';
+    this.requestUpdate();
+    
+    // メッセージ領域を最下部にスクロール
+    this.updateComplete.then(() => {
+      const messagesEl = this.shadowRoot.getElementById('messages');
+      if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
   }
 
   // メッセージごとの描画を分岐で返す
   _renderMessage(msg) {
-    if (msg.type === 'progress') {
-      return html`
-        <div class="message progress-message">
-          <div class="message-content">
-            <div class="progress-indicator">
-              <div class="progress-spinner"></div>
-              <span>${msg.progress?.message || 'Processing...'}</span>
-            </div>
-            <div class="status-timestamp">開始時刻: ${msg.progress?.timestamp}</div>
-            ${msg.progress?.timestamp ? html`
-              <div class="status-timestamp">
-                実行時間: ${this._formatDuration(
-                  msg.progress.timestamp,
-                  msg.progress?.step === 'completed' && msg.progress?.endTime
-                    ? msg.progress.endTime
-                    : new Date().toISOString()
-                )}
-              </div>
-            ` : ''}
-          </div>
-        </div>
-      `;
-    } else if (msg.type === 'ai') {
-      return html`
-        <div class="message ai-message">
-          <div class="message-content">
-            <div class="markdown-content" .innerHTML="${this._renderMarkdown(msg.content)}"></div>
-          </div>
-          ${msg.statusUpdates && msg.statusUpdates.length > 0 ? html`
-            <div class="status-updates">
-              <strong>🔄 プロセス履歴:</strong>
-              ${msg.statusUpdates.map(update => html`
-                <div class="status-update">
-                  <div>${update.message}</div>
-                  <div class="status-timestamp">
-                    ${new Date(update.timestamp * 1000).toLocaleTimeString()}
-                  </div>
-                </div>
-              `)}
-            </div>
-          ` : ''}
-          <div class="message-actions">
-            <button @click="${() => this._downloadAsPDF(msg.content)}" class="action-btn">
-              📄 PDF
-            </button>
-            <button @click="${() => this._downloadAsMarkdown(msg.content)}" class="action-btn">
-              📝 MD
-            </button>
-            <button @click="${() => this._copyToClipboard(msg.content)}" class="action-btn">
-              📋 Copy
-            </button>
-          </div>
-          ${msg.references && msg.references.length > 0 ? html`
-            <div class="references">
-              <strong>参考URL:</strong>
-              ${msg.references.map(ref => html`
-                <a href="${ref.url}" class="reference-link" target="_blank">
-                  ${ref.title || ref.url}
-                </a>
-              `)}
-            </div>
-          ` : ''}
-        </div>
-      `;
-    } else if (msg.type === 'user') {
-      return html`
-        <div class="message user-message">
-          <div class="message-content">
-            <div>${msg.content}</div>
-          </div>
-        </div>
-      `;
-    }
-    return html``;
+    return MessageRenderer.renderMessage(msg, MessageRenderer.formatDuration);
   }
 
-  // 開始・終了時刻から実行時間を計算して表示
-  _formatDuration(start, end) {
+  // アクションボタンのイベントハンドラーを設定
+  setupActionButtonHandlers() {
+    // テンプレートで@clickイベントを使うので、ここでは何もしない
+    console.log('[DEBUG] setupActionButtonHandlers called - using template @click events');
+  }
+
+  // アクションボタンのクリックハンドラー
+  handleActionButtonClick(event) {
+    console.log('[DEBUG] handleActionButtonClick called:', event);
+    console.log('[DEBUG] event.target:', event.target);
+    console.log('[DEBUG] event.target.tagName:', event.target.tagName);
+    console.log('[DEBUG] event.target.className:', event.target.className);
+    
+    // Shadow DOM内での要素検索
+    const button = event.target.closest('.action-btn');
+    console.log('[DEBUG] Button found:', button);
+    
+    // ボタンが見つからない場合は、イベントターゲット自体がボタンかチェック
+    const actualButton = button || (event.target.classList.contains('action-btn') ? event.target : null);
+    console.log('[DEBUG] Actual button:', actualButton);
+    
+    if (!actualButton) {
+      console.log('[DEBUG] No button found, returning...');
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const content = actualButton.dataset.content;
+    console.log('[DEBUG] Content:', content);
+    
+    // print-preview-btnの場合はcontentチェックをスキップ
+    if (!content && !actualButton.classList.contains('print-preview-btn')) {
+      console.log('[DEBUG] No content found, returning...');
+      return;
+    }
+
+    console.log('[DEBUG] Button classes:', actualButton.className);
+    
+    if (actualButton.classList.contains('pdf-btn')) {
+      console.log('[DEBUG] Calling downloadAsPDF...');
+      FileExporter.downloadAsPDF(content);
+    } else if (actualButton.classList.contains('print-preview-btn')) {
+      console.log('[DEBUG] Opening print preview...');
+      this._openPrintPreview();
+    } else if (actualButton.classList.contains('word-btn')) {
+      console.log('[DEBUG] Calling downloadAsWord...');
+      const references = actualButton.dataset.references ? JSON.parse(actualButton.dataset.references) : [];
+      FileExporter.downloadAsWord(content, references);
+    } else if (actualButton.classList.contains('md-btn')) {
+      console.log('[DEBUG] Calling downloadAsMarkdown...');
+      FileExporter.downloadAsMarkdown(content);
+    } else if (actualButton.classList.contains('copy-btn')) {
+      console.log('[DEBUG] Calling copyToClipboard...');
+      FileExporter.copyToClipboard(content, this.shadowRoot);
+    }
+  }
+
+  _openPrintPreview() {
     try {
-      // Z無しはローカル、Z付きはUTCとしてパース
-      let startTime;
-      if (typeof start === 'string') {
-        if (/Z$/.test(start)) {
-          startTime = new Date(start);
-        } else {
-          // YYYY-MM-DD HH:mm:ss 形式などはローカルタイムとして扱う
-          startTime = new Date(start.replace(/-/g, '/'));
-        }
-      } else {
-        startTime = start;
+      // AIメッセージのみを抽出
+      const aiMessages = this.messages.filter(msg => msg.type === 'ai' && msg.content);
+      
+      if (aiMessages.length === 0) {
+        alert('印刷可能なAI回答が見つかりません。');
+        return;
       }
-      let endTime;
-      if (typeof end === 'string') {
-        if (/Z$/.test(end)) {
-          endTime = new Date(end);
-        } else {
-          endTime = new Date(end.replace(/-/g, '/'));
-        }
-      } else {
-        endTime = end;
+
+      // メッセージデータをlocalStorageに保存
+      localStorage.setItem('printMessages', JSON.stringify(aiMessages));
+      
+      // 印刷専用ページを新しいウィンドウで開く
+      const printWindow = window.open('/print.html', '_blank', 'width=1200,height=800,scrollbars=yes');
+      
+      if (!printWindow) {
+        alert('ポップアップがブロックされました。ブラウザの設定を確認してください。');
       }
-      const diff = Math.max(0, endTime.getTime() - startTime.getTime());
-      const sec = Math.floor(diff / 1000) % 60;
-      const min = Math.floor(diff / 60000) % 60;
-      const hr = Math.floor(diff / 3600000);
-      let result = '';
-      if (hr > 0) result += hr + '時間';
-      if (min > 0) result += min + '分';
-      result += sec + '秒';
-      return result;
-    } catch (e) {
-      return '';
+    } catch (error) {
+      console.error('印刷プレビューの表示エラー:', error);
+      alert('印刷プレビューの表示中にエラーが発生しました。');
     }
   }
 
@@ -809,6 +950,10 @@ class ChatApp extends LitElement {
 
       const startData = await startResponse.json()
       const jobId = startData.job_id
+      
+      // ブラウザから参照できるようにグローバルに設定
+      window.currentJobId = jobId;
+      console.log('[DEBUG] Set currentJobId:', jobId);
       
       // プログレス表示を更新
       // CheckStatus APIから開始時刻(created_at)を取得
@@ -888,8 +1033,13 @@ class ChatApp extends LitElement {
   }
 
   async pollJobStatus(jobId, maxAttempts = 360) { // 最大1時間（10秒間隔）
+    // ブラウザから参照できるようにグローバルに設定
+    window.currentJobId = jobId;
+    console.log('[DEBUG] pollJobStatus - Set currentJobId:', jobId);
+    
     let lastStepCount = 0;
     let lastSteps = [];
+    const shownMessageIds = new Set(); // メッセージ重複表示防止用！
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const statusResponse = await fetch(`http://localhost:7071/api/research/status/${jobId}`)
@@ -897,6 +1047,7 @@ class ChatApp extends LitElement {
           throw new Error(`Status check failed: ${statusResponse.status}`)
         }
         const statusData = await statusResponse.json()
+        console.log('[DEBUG] pollJobStatus - API response:', JSON.stringify(statusData, null, 2));
 
         // 進捗stepsがあれば都度表示！
         const steps = Array.isArray(statusData.steps) ? statusData.steps : [];
@@ -937,10 +1088,26 @@ class ChatApp extends LitElement {
       if (Array.isArray(statusData.messages)) {
         // 最新Threadのみ表示！他jobIdのメッセージは除外
         this.messages = this.messages.filter(msg => msg.jobId === jobId || !msg.jobId || msg.type === 'progress');
-        statusData.messages.forEach(msg => {
+        
+        // 📝 全メッセージのannotationsを事前に集約してグローバルマップを作成
+        const globalAnnotationsMap = new Map();
+        statusData.messages.forEach((msg, msgIndex) => {
+          if (Array.isArray(msg.annotations)) {
+            msg.annotations.forEach((annotation, annIndex) => {
+              const key = `${msgIndex}:${annIndex}`;
+              globalAnnotationsMap.set(key, annotation);
+              console.log('[DEBUG] Added global annotation mapping:', key, annotation);
+            });
+          }
+        });
+        console.log('[DEBUG] Global annotations map created with keys:', Array.from(globalAnnotationsMap.keys()));
+        
+        statusData.messages.forEach((msg, messageIndex) => {
+          console.log('[DEBUG] Processing message with messageIndex:', messageIndex, 'msg.id:', msg.id);
           if (msg.id && shownMessageIds.has(msg.id)) return; // 既に表示済みはスキップ
           let content = '';
           let references = [];
+          let annotations = [];
           // content抽出ロジック（履歴と同じ！）
           if (Array.isArray(msg.content)) {
             content = msg.content.map(c => typeof c === 'string' ? c : JSON.stringify(c)).join('\n');
@@ -955,6 +1122,27 @@ class ChatApp extends LitElement {
               content = JSON.stringify(msg.content);
             }
           }
+          
+          // annotations配列も取得！
+          if (Array.isArray(msg.annotations)) {
+            annotations = msg.annotations;
+            console.log('[DEBUG] pollJobStatus - Message annotations found:', annotations);
+          } else {
+            console.log('[DEBUG] pollJobStatus - No annotations found:', msg.annotations);
+          }
+          
+          // citations配列も取得！（annotations と同じデータを citations としても設定）
+          let citations = [];
+          if (Array.isArray(msg.citations)) {
+            citations = msg.citations;
+            console.log('[DEBUG] pollJobStatus - Message citations found:', citations);
+          } else if (Array.isArray(msg.annotations)) {
+            citations = msg.annotations; // annotationsをcitationsとしても使用
+            console.log('[DEBUG] pollJobStatus - Using annotations as citations:', citations);
+          } else {
+            console.log('[DEBUG] pollJobStatus - No citations found:', msg.citations);
+          }
+          
           // citations, references, urls, sourcesも全部referencesにまとめる
           if (Array.isArray(msg.citations)) {
             msg.citations.forEach(cite => {
@@ -978,12 +1166,17 @@ class ChatApp extends LitElement {
           }
           let type = 'ai';
           if (msg.role === 'user') type = 'user';
+          console.log('[DEBUG] Adding message to this.messages with messageIndex:', messageIndex);
           this.messages = [
             ...this.messages,
             {
               type,
               content,
               references,
+              annotations,  // annotations配列を追加！
+              citations,    // citations配列も追加！
+              messageIndex, // messageIndexを追加！
+              globalAnnotationsMap, // グローバルannotationsマップを追加！
               jobId: jobId,
               messageId: msg.id,
               timestamp: msg.created_at || ''
@@ -1056,117 +1249,6 @@ class ChatApp extends LitElement {
     }
   }
 
-  // マークダウンレンダリング
-  _renderMarkdown(content) {
-    try {
-      // markedの設定
-      marked.setOptions({
-        breaks: true,
-        gfm: true
-      })
-      return marked(content)
-    } catch (error) {
-      console.error('Markdown parsing error:', error)
-      return content.replace(/\n/g, '<br>')
-    }
-  }
-
-  // PDFダウンロード
-  async _downloadAsPDF(content) {
-    try {
-      // 一時的な要素を作成してマークダウンをレンダリング
-      const tempDiv = document.createElement('div')
-      tempDiv.innerHTML = this._renderMarkdown(content)
-      tempDiv.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        width: 800px;
-        padding: 20px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        line-height: 1.6;
-        color: #333;
-      `
-      document.body.appendChild(tempDiv)
-
-      // html2canvasでキャンバスに変換
-      const canvas = await html2canvas(tempDiv, {
-        scale: 1,
-        useCORS: true,
-        allowTaint: true
-      })
-
-      // PDFを作成
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      
-      const imgWidth = 190 // A4幅 - マージン
-      const pageHeight = 297 // A4高さ
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 10
-
-      // 最初のページ
-      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
-
-      // 複数ページ対応
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight + 10
-        pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-      }
-
-      // ダウンロード
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
-      pdf.save(`deep-research-report-${timestamp}.pdf`)
-
-      // 一時要素を削除
-      document.body.removeChild(tempDiv)
-    } catch (error) {
-      console.error('PDF download error:', error)
-      alert('PDFの生成に失敗しました: ' + error.message)
-    }
-  }
-
-  // マークダウンダウンロード
-  _downloadAsMarkdown(content) {
-    try {
-      const blob = new Blob([content], { type: 'text/markdown' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
-      a.download = `deep-research-report-${timestamp}.md`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Markdown download error:', error)
-      alert('マークダウンのダウンロードに失敗しました: ' + error.message)
-    }
-  }
-
-  // クリップボードにコピー
-  async _copyToClipboard(content) {
-    try {
-      await navigator.clipboard.writeText(content)
-      // 一時的な成功表示 - イベントを正しく取得
-      const buttons = this.shadowRoot.querySelectorAll('.action-btn')
-      const copyBtn = Array.from(buttons).find(btn => btn.textContent.includes('Copy'))
-      if (copyBtn) {
-        const originalText = copyBtn.textContent
-        copyBtn.textContent = '✅ Copied!'
-        setTimeout(() => {
-          copyBtn.textContent = originalText
-        }, 2000)
-      }
-    } catch (error) {
-      console.error('Clipboard copy error:', error)
-      alert('クリップボードへのコピーに失敗しました: ' + error.message)
-    }
-  }
 }
 
-customElements.define('chat-app', ChatApp)
+customElements.define('chat-app-v3', ChatApp)
