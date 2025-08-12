@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bold Text Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .original { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+        .processed { background: #e8f4f8; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Bold Text Rendering Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Case 1: Original Problem</h2>
+        <div class="original">Original: ** クラウドロックインと戦略上のリスク: **</div>
+        <div class="processed" id="test1"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Case 2: Normal Bold</h2>
+        <div class="original">Original: **正常な太字テスト**</div>
+        <div class="processed" id="test2"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Case 3: Bold with Colon</h2>
+        <div class="original">Original: **重要な項目:**</div>
+        <div class="processed" id="test3"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Case 4: Bold with Space Inside</h2>
+        <div class="original">Original: ** 内部にスペースがある太字 **</div>
+        <div class="processed" id="test4"></div>
+    </div>
+
+    <script type="module">
+        import { MarkdownRenderer } from './src/markdown-renderer.js';
+        
+        const testCases = [
+            '** クラウドロックインと戦略上のリスク: **',
+            '**正常な太字テスト**',
+            '**重要な項目:**',
+            '** 内部にスペースがある太字 **'
+        ];
+        
+        testCases.forEach((test, index) => {
+            const result = MarkdownRenderer.renderMarkdown(test);
+            console.log(`Test ${index + 1}:`, test, '→', result);
+            document.getElementById(`test${index + 1}`).innerHTML = 
+                `<strong>Processed:</strong> ${result}`;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>カンマリスト修正デバッグ</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-case { 
+            margin-bottom: 20px; 
+            border: 1px solid #ccc; 
+            padding: 15px; 
+            border-radius: 5px;
+        }
+        .input { background: #f8f8f8; padding: 10px; margin: 5px 0; white-space: pre-wrap; }
+        .output { background: #e8f4f8; padding: 10px; margin: 5px 0; }
+        .expected { background: #e8f8e8; padding: 10px; margin: 5px 0; }
+        code { background: #f0f0f0; padding: 2px 4px; }
+        h3 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>カンマリスト修正デバッグテスト</h1>
+    
+    <div class="test-case">
+        <h3>テストケース1: 基本的なカンマリスト</h3>
+        <div><strong>入力:</strong></div>
+        <div class="input" id="input1">- **その他の導入状況:** 上記のような効果から、Fabric RTIは各業界で急速に採用が進んでいます。
+
+, 小売店におけるリアルタイム在庫管理の例: 最適な在庫水準の維持や品切れリスク低減、顧客満足度向上などRTI導入による効果が示されている。
+
+, Fabricの統合プラットフォームによりレガシーインフラを統廃合した結果、3年間で最大77.9万ドルのインフラ費用削減が可能と試算されている。</div>
+        
+        <div><strong>期待される結果:</strong></div>
+        <div class="expected">- **その他の導入状況:** 上記のような効果から、Fabric RTIは各業界で急速に採用が進んでいます。
+
+- 小売店におけるリアルタイム在庫管理の例: 最適な在庫水準の維持やいスク低減、顧客満足度向上などRTI導入による効果が示されている。
+
+- Fabricの統合プラットフォームによりレガシーインフラを統廃合した結果、3年間で最大77.9万ドルのインフラ費用削減が可能と試算されている。</div>
+        
+        <div><strong>実際の結果:</strong></div>
+        <div class="output" id="output1"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>テストケース2: 文中のカンマは保持</h3>
+        <div><strong>入力:</strong></div>
+        <div class="input" id="input2">- **コスト効果:** データ処理の効率化により、時間とコストを削減できます。
+
+正常なカンマ, このカンマは変換されるべきではありません。
+
+, 変換されるべきリスト項目: これは変換されるべきです。</div>
+        
+        <div><strong>期待される結果:</strong></div>
+        <div class="expected">- **コスト効果:** データ処理の効率化により、時間とコストを削減できます。
+
+正常なカンマ, このカンマは変換されるべきではありません。
+
+- 変換されるべきリスト項目: これは変換されるべきです。</div>
+        
+        <div><strong>実際の結果:</strong></div>
+        <div class="output" id="output2"></div>
+    </div>
+
+    <script>
+        // 修正処理をシミュレート
+        function fixCommaParagraphs(content) {
+            console.log('Before fix:', content);
+            
+            // 改行後の「, 」を「- 」に変換（コロンがある場合のみ）
+            let fixed = content.replace(/\n, ([^,\n]+?:)/g, '\n- $1');
+            
+            console.log('After fix:', fixed);
+            return fixed;
+        }
+        
+        // テストケース1
+        const input1 = document.getElementById('input1').textContent;
+        const output1 = fixCommaParagraphs(input1);
+        document.getElementById('output1').innerHTML = output1.replace(/\n/g, '<br>');
+        
+        // テストケース2  
+        const input2 = document.getElementById('input2').textContent;
+        const output2 = fixCommaParagraphs(input2);
+        document.getElementById('output2').innerHTML = output2.replace(/\n/g, '<br>');
+        
+        // デバッグ情報を出力
+        console.log('=== Debug Info ===');
+        console.log('Test 1 - Input length:', input1.length);
+        console.log('Test 1 - Output length:', output1.length);
+        console.log('Test 2 - Input length:', input2.length);
+        console.log('Test 2 - Output length:', output2.length);
+    </script>
+</body>
+</html>
