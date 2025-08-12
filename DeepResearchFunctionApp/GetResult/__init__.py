@@ -38,6 +38,30 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # ジョブステップも取得
         steps = job_manager.get_job_steps(job_id)
         
+        # Citation情報を抽出
+        citations = []
+        for step in steps:
+            if step.get('step_name') == 'citation':
+                # Citation形式: "【55:17†source】: https://example.com [Title]"
+                detail = step.get('step_details', '')
+                if ':' in detail:
+                    try:
+                        citation_id = detail.split(':')[0].strip()
+                        rest = detail.split(':', 1)[1].strip()
+                        if '[' in rest and ']' in rest:
+                            url = rest.split('[')[0].strip()
+                            title = rest.split('[')[1].split(']')[0].strip()
+                        else:
+                            url = rest
+                            title = ''
+                        citations.append({
+                            'id': citation_id,
+                            'url': url,
+                            'title': title
+                        })
+                    except Exception as e:
+                        logging.warning(f"Citation parsing error: {str(e)}")
+        
         # レスポンスデータを構築
         # created_at, completed_atをZ付きUTCで返す
         def ensure_z(dt):
@@ -50,7 +74,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "query": job['query'],
             "created_at": ensure_z(job['created_at']),
             "completed_at": ensure_z(job['completed_at']),
-            "steps": steps
+            "steps": steps,
+            "citations": citations
         }
         
         # ステータスに応じてレスポンスを構築

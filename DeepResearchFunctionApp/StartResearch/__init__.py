@@ -130,8 +130,118 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 job_manager.add_job_step(job_id, 'id_debug', f"thread_id={thread.id}, run_id={run.id}, agent_id={agent.id}")
                 job_manager.add_job_step(job_id, 'run_created', f'Run ID: {run.id}で調査実行中')
                 logging.info(f"Job {job_id}: Created run {run.id} in thread {thread.id} (agent {agent.id})")
+                
                 result_holder['success'] = True
                 result_holder['error'] = None
+                result_holder['run_id'] = run.id
+                
+                # 非同期でrun完了後のcitation保存を開始
+                def save_citations_after_completion():
+                    logging.info(f"[DEBUG] save_citations_after_completion function called")
+                    job_manager.add_job_step(job_id, 'debug_citation_func', 'Citation保存関数が呼ばれました')
+                    try:
+                        # runの完了を待つ（statusがcompletedになるまでポーリング）
+                        import time
+                        max_wait = 600  # 最大10分
+                        wait_count = 0
+                        logging.info(f"[DEBUG] Starting citation save process for run_id={run.id}")
+                        while wait_count < max_wait:
+                            run_status = project.agents.runs.get(run_id=run.id)
+                            logging.info(f"[DEBUG] run_status.status={getattr(run_status, 'status', None)} wait_count={wait_count}")
+                            if getattr(run_status, 'status', None) == 'completed':
+                                logging.info(f"[DEBUG] Run completed, proceeding with citation extraction")
+                                break
+                            time.sleep(5)
+                            wait_count += 5
+                        
+                        # 完了したら再度get_messages
+                        messages = project.agents.runs.get_messages(run_id=run.id)
+                        logging.info(f"[DEBUG] 完了後のmessages数: {len(messages)}")
+                        
+                        # 追加: messagesのannotations内容を全部ログ出力
+                        for msg in messages:
+                            annotations = getattr(msg, 'annotations', None)
+                            msg_id = getattr(msg, 'id', None)
+                            msg_role = getattr(msg, 'role', None)
+                            msg_content = getattr(msg, 'content', None)
+                            logging.info(f"[DEBUG] msg.id={msg_id} role={msg_role} content_len={len(msg_content) if msg_content else 0}")
+                            logging.info(f"[DEBUG] annotations={annotations}")
+                            
+                            # contentの中身も一部確認
+                            if msg_content:
+                                content_preview = msg_content[:200] + "..." if len(msg_content) > 200 else msg_content
+                                logging.info(f"[DEBUG] content_preview={content_preview}")
+                        
+                        # Citation抽出処理
+                        citation_count = 0
+                        for msg in messages:
+                            annotations = getattr(msg, 'annotations', None)
+                            logging.info(f"[DEBUG] Processing message annotations: {annotations}")
+                            
+                            if annotations:
+                                logging.info(f"[DEBUG] Found {len(annotations)} annotations")
+                                for i, ann in enumerate(annotations):
+                                    logging.info(f"[DEBUG] annotation[{i}]: {ann}")
+                                    
+                                    # 複数の形式を試す
+                                    if isinstance(ann, dict):
+                                        if ann.get('type') == 'url_citation':
+                                            # パターン1: url_citation形式
+                                            logging.info(f"[DEBUG] Found url_citation annotation")
+                                            try:
+                                                citation_id = ann.get('text', '')
+                                                url_citation_obj = ann.get('url_citation', {})
+                                                if isinstance(url_citation_obj, str):
+                                                    url_citation_obj = json.loads(url_citation_obj)
+                                                citation_url = url_citation_obj.get('url', '')
+                                                citation_title = url_citation_obj.get('title', '')
+                                                job_manager.add_job_step(job_id, 'citation', f"{citation_id}: {citation_url} [{citation_title}]")
+                                                logging.info(f"[DEBUG] Citation保存 type1: {citation_id} -> {citation_url}")
+                                                citation_count += 1
+                                            except Exception as e:
+                                                logging.warning(f"url_citation処理失敗: {str(e)}")
+                                        elif ann.get('type') == 'file_citation':
+                                            # パターン2: file_citation形式
+                                            logging.info(f"[DEBUG] Found file_citation annotation")
+                                            try:
+                                                citation_id = ann.get('text', '')
+                                                file_citation_obj = ann.get('file_citation', {})
+                                                if isinstance(file_citation_obj, str):
+                                                    file_citation_obj = json.loads(file_citation_obj)
+                                                citation_url = file_citation_obj.get('file_id', '')
+                                                citation_title = file_citation_obj.get('quote', '')
+                                                job_manager.add_job_step(job_id, 'citation', f"{citation_id}: {citation_url} [{citation_title}]")
+                                                logging.info(f"[DEBUG] Citation保存 type2: {citation_id} -> {citation_url}")
+                                                citation_count += 1
+                                            except Exception as e:
+                                                logging.warning(f"file_citation処理失敗: {str(e)}")
+                                        else:
+                                            # その他の形式もログ出力
+                                            logging.info(f"[DEBUG] Other annotation type: {ann.get('type')}")
+                                    else:
+                                        logging.info(f"[DEBUG] Non-dict annotation: {type(ann)}")
+                            else:
+                                logging.info(f"[DEBUG] No annotations found in message")
+                        
+                        logging.info(f"[DEBUG] Citation保存処理完了: {citation_count}個のcitationを保存")
+                            
+                    except Exception as e:
+                        logging.error(f"[ERROR] save_citations_after_completion failed: {str(e)}")
+                        logging.error(f"[ERROR] Exception traceback: {str(e)}")
+                        import traceback
+                        logging.error(f"[ERROR] Full traceback: {traceback.format_exc()}")
+                
+                # バックグラウンドスレッドでcitation保存を開始
+                # citation_thread = threading.Thread(target=save_citations_after_completion)
+                # citation_thread.daemon = True
+                # citation_thread.start()
+                
+                # 同期的に実行に変更してテスト
+                logging.info(f"[DEBUG] Starting synchronous citation save process")
+                job_manager.add_job_step(job_id, 'debug_citation_start', 'Citation保存処理を開始します')
+                save_citations_after_completion()
+                job_manager.add_job_step(job_id, 'debug_citation_end', 'Citation保存処理を完了しました')
+                logging.info(f"[DEBUG] Synchronous citation save process completed")
             except Exception as e:
                 logging.error(f"Error in background research for job {job_id}: {str(e)}")
                 job_manager.update_job_error(job_id, str(e))
@@ -147,11 +257,34 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         thread.join()  # 完全同期でrun/thread作成まで待つ（API応答で成否を返すため）
 
         if result_holder.get('success'):
+            # run完了前のget_messagesでassistantメッセージを抽出
+            try:
+                project_endpoint = os.getenv("PROJECT_ENDPOINT")
+                project = AIProjectClient(
+                    endpoint=project_endpoint,
+                    credential=DefaultAzureCredential()
+                )
+                messages = project.agents.runs.get_messages(run_id=result_holder.get('run_id', None) or job_manager.get_job_run_id(job_id))
+                assistant_msgs = []
+                for msg in messages:
+                    if getattr(msg, 'role', None) == 'assistant':
+                        content = getattr(msg, 'content', None)
+                        created_at = getattr(msg, 'created_at', None)
+                        annotations = getattr(msg, 'annotations', None)
+                        assistant_msgs.append({
+                            "content": content,
+                            "created_at": created_at,
+                            "annotations": annotations
+                        })
+            except Exception as e:
+                logging.warning(f"中間メッセージ取得失敗: {str(e)}")
+                assistant_msgs = []
             response_data = {
                 "job_id": job_id,
                 "status": "created",
                 "message": "Research job created successfully",
-                "created_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
+                "created_at": datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
+                "messages": assistant_msgs
             }
             return func.HttpResponse(
                 json.dumps(response_data),

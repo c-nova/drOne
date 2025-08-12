@@ -90,6 +90,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                     # 参考文献やリンク情報も抽出（annotationsもチェック！）
                                     annotations = content_item['text'].get('annotations', [])
                                     logging.info(f"annotations: {json.dumps(annotations, ensure_ascii=False)}")
+                                    
+                                    # ★重要：annotationsをそのまま保存★
+                                    if annotations:
+                                        msg_dict['annotations'] = annotations
+                                    
+                                    # 従来のcitations形式も維持（後方互換性のため）
                                     for ann in annotations:
                                         if ann.get('type') == 'url_citation':
                                             url = ann.get('url')
