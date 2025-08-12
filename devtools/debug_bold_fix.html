@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>太字修正デバッグ</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-case { margin-bottom: 20px; border: 1px solid #ccc; padding: 10px; }
+        code { background: #f0f0f0; padding: 2px 4px; }
+    </style>
+</head>
+<body>
+    <h1>太字修正デバッグテスト</h1>
+    <div id="test-results">
+        <div class="test-case">
+            <div><strong>元のテキスト:</strong> <code>** Mapping unique offerings **</code></div>
+            <div><strong>期待される結果:</strong> <strong>Mapping unique offerings</strong></div>
+            <div><strong>実際の結果（markedライブラリ使用）:</strong> <span id="result1"></span></div>
+        </div>
+        
+        <div class="test-case">
+            <div><strong>元のテキスト:</strong> <code>** Highlighting Azure's integration**</code></div>
+            <div><strong>期待される結果:</strong> <strong>Highlighting Azure's integration</strong></div>
+            <div><strong>実際の結果（markedライブラリ使用）:</strong> <span id="result2"></span></div>
+        </div>
+        
+        <div class="test-case">
+            <div><strong>元のテキスト:</strong> <code>**Evaluating migration challenges **</code></div>
+            <div><strong>期待される結果:</strong> <strong>Evaluating migration challenges</strong></div>
+            <div><strong>実際の結果（markedライブラリ使用）:</strong> <span id="result3"></span></div>
+        </div>
+        
+        <div class="test-case">
+            <div><strong>元のテキスト:</strong> <code>** クラウドロックインと戦略上のリスク: **</code></div>
+            <div><strong>期待される結果:</strong> <strong>クラウドロックインと戦略上のリスク:</strong></div>
+            <div><strong>実際の結果（markedライブラリ使用）:</strong> <span id="result4"></span></div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { marked } from 'https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js';
+        
+        // 各パターンをテスト
+        const testCases = [
+            '** Mapping unique offerings **',
+            '** Highlighting Azure\'s integration**',
+            '**Evaluating migration challenges **',
+            '** クラウドロックインと戦略上のリスク: **'
+        ];
+        
+        testCases.forEach((testCase, index) => {
+            const resultId = `result${index + 1}`;
+            const resultElement = document.getElementById(resultId);
+            
+            // 現在のmarkdown-renderer.jsの処理をシミュレート
+            let processedContent = testCase;
+            
+            // ** text ** パターンの調整
+            processedContent = processedContent.replace(/\*\* ([^*]+?) \*\*/g, '**$1**');
+            
+            // markedで処理
+            const rendered = marked.parse(processedContent);
+            
+            resultElement.innerHTML = rendered;
+            
+            // HTMLソースも表示
+            const sourceElement = document.createElement('div');
+            sourceElement.innerHTML = `<strong>HTMLソース:</strong> <code>${rendered.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>`;
+            resultElement.parentElement.appendChild(sourceElement);
+        });
+    </script>
+</body>
+</html>
