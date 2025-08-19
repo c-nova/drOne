@@ -38,12 +38,54 @@ const API_CONFIG = {
 class ChatApp extends LitElement {
   // 履歴用stateはstatic propertiesで管理！
   // 画面ロード時に進行中ジョブだけ復元（履歴機能は削除！）
+  
+  static properties = {
+    messages: { type: Array },
+    currentProgress: { type: Object },
+    isLoading: { type: Boolean },
+    inputValue: { type: String },
+    historyJobs: { type: Array },
+    expandedJobs: { type: Array },
+    currentUser: { type: Object }  // ユーザー情報を追加
+  };
+
+  constructor() {
+    super();
+    this.messages = [];
+    this.currentProgress = null;
+    this.isLoading = false;
+    this.inputValue = '';
+    this.historyJobs = [];
+    this.expandedJobs = [];
+    this.currentUser = null;  // ユーザー情報を初期化
+  }
+  
   connectedCallback() {
     console.log('connectedCallback 開始！');
     super.connectedCallback();
     
-    // 履歴取得をリトライ付きで実行
+    // ユーザー情報と履歴を取得
+    this.loadUserInfo();
     this.loadHistoryWithRetry();
+  }
+  
+  // ユーザー情報を取得
+  async loadUserInfo() {
+    try {
+      const response = await fetch('/.auth/me');
+      if (response.ok) {
+        const userInfo = await response.json();
+        if (userInfo && userInfo.length > 0) {
+          this.currentUser = userInfo[0];
+          console.log('User info loaded:', this.currentUser);
+        }
+      } else {
+        console.log('User not authenticated');
+      }
+    } catch (error) {
+      console.error('Failed to load user info:', error);
+    }
+    this.requestUpdate();
   }
   
   firstUpdated() {
@@ -157,9 +199,45 @@ class ChatApp extends LitElement {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
       padding: 20px;
-      text-align: center;
-      font-size: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       font-weight: bold;
+    }
+
+    .header-title {
+      font-size: 1.5rem;
+    }
+
+    .user-section {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-size: 0.9rem;
+    }
+
+    .user-name {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 15px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .logout-button {
+      background: rgba(255, 255, 255, 0.9);
+      color: #667eea;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+
+    .logout-button:hover {
+      background: white;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
 
     .messages {
@@ -711,7 +789,15 @@ class ChatApp extends LitElement {
         </aside>
         <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
           <div class="header">
-            🔍 Deep Research Chat
+            <div class="header-title">🔍 Deep Research Chat</div>
+            <div class="user-section">
+              ${this.currentUser ? html`
+                <span class="user-name">👤 ${this.currentUser.userDetails || this.currentUser.userId}</span>
+                <button class="logout-button" @click=${this._logout}>ログアウト</button>
+              ` : html`
+                <span class="user-name">🔐 認証中...</span>
+              `}
+            </div>
           </div>
           <div class="messages" id="messages" style="flex:1;overflow-y:auto;">
             ${this.messages.map(msg => this._renderMessage(msg))}
@@ -927,6 +1013,11 @@ class ChatApp extends LitElement {
       e.preventDefault()
       this._sendMessage()
     }
+  }
+
+  // ログアウト機能
+  _logout() {
+    window.location.href = '/.auth/logout';
   }
 
   async _sendMessage() {
