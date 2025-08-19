@@ -9,11 +9,11 @@
   },
   "routes": [
     {
-      "route": "/*",
+      "route": "/api/*",
       "allowedRoles": ["authenticated"]
     },
     {
-      "route": "/api/*",
+      "route": "/*",
       "allowedRoles": ["authenticated"]
     }
   ],
