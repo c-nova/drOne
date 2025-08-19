@@ -54,7 +54,9 @@ class ChatApp extends LitElement {
     this.messages = [];
     this.currentProgress = null;
     this.isLoading = false;
+    this.loading = false;  // 別のプロパティも併用
     this.inputValue = '';
+    this.isComposing = false;
     this.historyJobs = [];
     this.expandedJobs = [];
     this.currentUser = null;  // ユーザー情報を初期化
@@ -63,6 +65,9 @@ class ChatApp extends LitElement {
   connectedCallback() {
     console.log('connectedCallback 開始！');
     super.connectedCallback();
+    
+    // グローバルに参照を設定（MessageRendererからアクセスするため）
+    window.chatApp = this;
     
     // ユーザー情報と履歴を取得
     this.loadUserInfo();
@@ -743,19 +748,6 @@ class ChatApp extends LitElement {
         // 何もしない
       }
     })();
-  }
-
-  constructor() {
-    super();
-    this.messages = [];
-    this.loading = false;
-    this.inputValue = '';
-    this.isComposing = false;
-    this.currentProgress = null;
-    this.historyJobs = [];
-    
-    // グローバルに参照を設定（MessageRendererからアクセスするため）
-    window.chatApp = this;
   }
 
   render() {
