@@ -4,7 +4,7 @@ swa-chat-ui/dist/
 swa-chat-ui/.DS_Store
 swa-chat-ui/.env
 
-# Python (DeepResearchFunctionApp)
+# Python (DeepResearchFunctionApp + API)
 DeepResearchFunctionApp/.venv/
 DeepResearchFunctionApp/__pycache__/
 DeepResearchFunctionApp/*/__pycache__/
@@ -14,6 +14,11 @@ DeepResearchFunctionApp/.DS_Store
 DeepResearchFunctionApp/local.settings.json
 DeepResearchFunctionApp/shared/research_jobs.db
 DeepResearchFunctionApp/research_jobs.db
+api/.venv/
+api/__pycache__/
+api/*/__pycache__/
+*.pyc
+*.pyo
 
 # OS/Editor
 .DS_Store

@@ -1,0 +1,64 @@
+name: Deploy Azure (azd)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC ログイン用
+  contents: read
+
+env:
+  AZURE_ENV_NAME: drone
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup azd
+        uses: Azure/setup-azd@v1
+        with:
+          version: 1.18.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: azd env set subscription (冪等)
+        run: |
+          azd config set alpha.resourceGroupDeployments on || true
+          echo "Using subscription: $AZURE_SUBSCRIPTION_ID"
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision (skip if既存)
+        run: |
+          azd provision --no-prompt --environment $AZURE_ENV_NAME || echo "provision skipped/failed (既存想定)"
+
+      - name: Deploy
+        run: azd deploy --no-prompt --environment $AZURE_ENV_NAME
+
+      - name: Upload azd logs (失敗時)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: azd-logs
+          path: ~/.azd/logs
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## azd deploy summary" >> $GITHUB_STEP_SUMMARY
+          azd env get-values --environment $AZURE_ENV_NAME >> $GITHUB_STEP_SUMMARY || true
+
+# シークレット必要:
+#  AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+# これらは GitHub -> Settings -> Secrets and variables -> Actions に登録。

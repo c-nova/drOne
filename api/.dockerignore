@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.git
+.gitignore
+.azure
+.azure/*
+.vscode
+*.db
+research_jobs.db

@@ -11,6 +11,30 @@ import { MessageProcessor } from './message-processor.js'
 // グローバルBufferを設定
 window.Buffer = Buffer
 
+// API設定
+const API_CONFIG = {
+  baseUrl: import.meta.env.VITE_API_BASE_URL || 'https://drone-dev-api.blueisland-80a266e9.eastasia.azurecontainerapps.io',
+  apiKey: import.meta.env.VITE_API_KEY || '', // 本番環境では環境変数から取得
+  
+  // APIヘッダーを生成
+  getHeaders() {
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (this.apiKey) {
+      headers['x-api-key'] = this.apiKey;
+    }
+    
+    return headers;
+  },
+  
+  // API URLを生成
+  getUrl(endpoint) {
+    return `${this.baseUrl}${endpoint}`;
+  }
+};
+
 class ChatApp extends LitElement {
   // 履歴用stateはstatic propertiesで管理！
   // 画面ロード時に進行中ジョブだけ復元（履歴機能は削除！）
@@ -37,7 +61,9 @@ class ChatApp extends LitElement {
   async loadHistoryWithRetry(retries = 3) {
     console.log('履歴取得開始！リトライ回数:', retries);
     try {
-      const res = await fetch('http://localhost:7071/api/research/jobs');
+      const res = await fetch(API_CONFIG.getUrl('/api/ListJobs'), {
+        headers: API_CONFIG.getHeaders()
+      });
       console.log('API response:', res.status, res.statusText);
       if (!res.ok) {
         throw new Error(`API呼び出しエラー: ${res.status} ${res.statusText}`);
@@ -557,7 +583,9 @@ class ChatApp extends LitElement {
     // 非同期処理は即時関数で
     (async () => {
       try {
-        const res = await fetch('http://localhost:7071/api/research/jobs');
+        const res = await fetch(API_CONFIG.getUrl('/api/ListJobs'), {
+          headers: API_CONFIG.getHeaders()
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (!data.jobs) return;
@@ -739,7 +767,9 @@ class ChatApp extends LitElement {
       }
 
       // メッセージ一覧取得
-      const resp = await fetch(`http://localhost:7071/api/research/status/${jobId}`);
+      const resp = await fetch(API_CONFIG.getUrl(`/api/CheckStatus/${jobId}`), {
+        headers: API_CONFIG.getHeaders()
+      });
       if (!resp.ok) {
         throw new Error('メッセージ取得失敗: ' + resp.status);
       }
@@ -936,11 +966,9 @@ class ChatApp extends LitElement {
 
     try {
       // 1. Deep Research開始
-      const startResponse = await fetch('http://localhost:7071/api/research/start', {
+      const startResponse = await fetch(API_CONFIG.getUrl('/api/StartResearch'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: API_CONFIG.getHeaders(),
         body: JSON.stringify({ query, user_id: 'anonymous' })
       })
 
@@ -959,7 +987,9 @@ class ChatApp extends LitElement {
       // CheckStatus APIから開始時刻(created_at)を取得
       let start_time = this.currentProgress.start_time;
       try {
-        const statusResp = await fetch(`http://localhost:7071/api/research/status/${jobId}`);
+        const statusResp = await fetch(API_CONFIG.getUrl(`/api/CheckStatus/${jobId}`), {
+          headers: API_CONFIG.getHeaders()
+        });
         if (statusResp.ok) {
           const statusData = await statusResp.json();
           if (statusData.created_at) {
@@ -1042,7 +1072,9 @@ class ChatApp extends LitElement {
     const shownMessageIds = new Set(); // メッセージ重複表示防止用！
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const statusResponse = await fetch(`http://localhost:7071/api/research/status/${jobId}`)
+        const statusResponse = await fetch(API_CONFIG.getUrl(`/api/CheckStatus/${jobId}`), {
+          headers: API_CONFIG.getHeaders()
+        })
         if (!statusResponse.ok) {
           throw new Error(`Status check failed: ${statusResponse.status}`)
         }
@@ -1213,7 +1245,9 @@ class ChatApp extends LitElement {
         }
 
         if (statusData.status === 'completed') {
-          const resultResponse = await fetch(`http://localhost:7071/api/research/result/${jobId}`)
+          const resultResponse = await fetch(API_CONFIG.getUrl(`/api/GetResult/${jobId}`), {
+            headers: API_CONFIG.getHeaders()
+          })
           const resultData = await resultResponse.json()
           return {
             success: true,

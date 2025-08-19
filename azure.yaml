@@ -1,0 +1,36 @@
+name: drone
+metadata:
+  template: container-app-modular-bicep
+
+infra:
+  provider: bicep
+  path: ./infra
+  parameters:
+    # Mapped to main.bicep params
+    baseName: ${AZURE_BASE_NAME:-drone}
+    environment: ${AZURE_ENVIRONMENT:-dev}
+    location: ${AZURE_LOCATION:-eastasia}
+    imageTag: ${AZURE_IMAGE_TAG:-latest}
+    containerCpu: ${AZURE_CONTAINER_CPU:-1}
+  containerMemory: ${AZURE_CONTAINER_MEMORY:-2Gi}
+    minReplicas: ${AZURE_MIN_REPLICAS:-1}
+    maxReplicas: ${AZURE_MAX_REPLICAS:-3}
+    apiTargetPort: ${AZURE_API_PORT:-8080}
+    cosmosDatabaseName: ${AZURE_COSMOS_DB_NAME:-DeepResearch}
+
+services:
+  api:
+    project: ./api
+    language: python
+    host: containerapp
+    docker:
+      path: ./api  # build context (Dockerfile auto-detected)
+
+  web:
+    project: ./swa-chat-ui
+    language: js
+    host: staticwebapp
+
+# (Optional) Legacy Functions service removed. If needed, re-add under services with host:function.
+
+pipeline: {}
