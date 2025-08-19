@@ -36,3 +36,28 @@ yarn-error.log*
 # Misc
 .env
 .env.*
+
+# Azure packages and binaries (exclude from git)
+DeepResearchFunctionApp/azure*/
+DeepResearchFunctionApp/bin/
+DeepResearchFunctionApp/certifi/
+DeepResearchFunctionApp/cffi/
+DeepResearchFunctionApp/charset_normalizer/
+DeepResearchFunctionApp/cryptography/
+DeepResearchFunctionApp/idna/
+DeepResearchFunctionApp/isodate/
+DeepResearchFunctionApp/jwt/
+DeepResearchFunctionApp/markupsafe/
+DeepResearchFunctionApp/msal*/
+DeepResearchFunctionApp/pycparser/
+DeepResearchFunctionApp/requests/
+DeepResearchFunctionApp/six.py
+DeepResearchFunctionApp/tests/
+DeepResearchFunctionApp/typing_extensions.py
+DeepResearchFunctionApp/urllib3/
+DeepResearchFunctionApp/werkzeug/
+DeepResearchFunctionApp/*.dist-info/
+
+# Large files
+*.zip
+*.tar.gz
